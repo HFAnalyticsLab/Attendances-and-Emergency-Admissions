@@ -90,11 +90,11 @@ parse_month <- function(s) {
 }
 
 parse_year <- function(s) {
-    re <- regexec("\\b\\d{4}\\b", s)
+    re <- regexec("(?<!\\d)\\d{4}(?!\\d)", s, perl=TRUE) # 4 digits NOT preceded by or followed by a digit
     l <- attr(re[[1]],"match.length")
     if (l != -1) {
-        match = re[[1]][1]
-        ystr <- substring(s, match, match+l)
+        match <- re[[1]][1]
+        ystr <- substring(s, match, match+l-1)
         year <- as.numeric(ystr)
     } else {
         year <- NA
