@@ -105,7 +105,7 @@ parse_year <- function(s) {
 parse_version <- function(s) {
     month<- parse_month(s)
     year <- parse_year(s)
-    tibble(month=c(month), year=c(year))
+    dplyr::tibble(month=c(month), year=c(year))
 }
 
 parse_release_frequency <- function(s) {
@@ -136,7 +136,7 @@ parse_edition <- function(s) {
     }
 }
 
-ae_href_parser <- function(link_node) {
+ae_href_parser <- function(link_node, parent) {
     href<- link_node$href
     match <- regexec(".*/(.*?)$", href)[[1]]
     if (match[1] == -1) {
@@ -145,12 +145,13 @@ ae_href_parser <- function(link_node) {
 
     s <- substring(href,match[2])
 
-    dplyr::tibble(version=parse_version(s),
-                  edition=parse_edition(s),
-                  description=c(link_node$description),
-                  href=c(href),
-                  adjusted=parse_adjusted(s),
-                  release_frequency=parse_release_frequency(s))
+    result <- dplyr::tibble(version=parse_version(s),
+                            edition=parse_edition(s),
+                            description=c(link_node$description),
+                            href=c(href),
+                            adjusted=parse_adjusted(s),
+                            release_frequency=parse_release_frequency(s))
+    result$id <- sprintf("%s_%s_%s_%s_%s", parent, result$edition, result$release_frequency, result$version$month, result$version$year)
 }
 
 
@@ -166,11 +167,12 @@ ae_href_parser <- function(link_node) {
 ##' @author neale
 ae_available_versions <- function(metadata, id, edition) {
     edition_regex <- sprintf("(%s)", paste(ae_available_editions(), collapse="|"))
-    links <- links_from_url(sprintf("%s/%s/", base_url, id)) %>%
+    versions <- links_from_url(sprintf("%s/%s/", base_url, id)) %>%
         purrr::map(~ dplyr::tibble(href=xml2::xml_attr(., "href"), description=xml2::xml_text(.))) %>%
         purrr::keep(~ grepl(edition_regex, .$href, ignore.case=TRUE)) %>%
-        purrr::modify(ae_href_parser)
-    links
+        purrr::modify(ae_href_parser, id)
+
+    versions
 }
 
 ##' .. content for \description{} (no empty lines) ..
