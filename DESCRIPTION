@@ -1,0 +1,30 @@
+Package: AttendancesAndEmergencyAdmissions
+Title: A Download pipelin for NHS Attendance and Emergency Admissions
+Version: 0.0.0.9000
+Authors@R: 
+    person(given = "Neale",
+           family = "Swinnerton",
+           role = c("aut", "cre"),
+           email = "neale@mastodonc.com",
+           comment = c(ORCID = "YOUR-ORCID-ID"))
+Description: What the package does (one paragraph).
+License: MIT + file LICENSE
+Encoding: UTF-8
+LazyData: true
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 6.1.1
+Imports: 
+    magrittr,
+    rvest,
+    xml2,
+    dplyr,
+    purrr,
+    tibble,
+    stringr,
+    tidyr,
+    monstR,
+    logger
+Suggests: 
+    knitr,
+    rmarkdown
+VignetteBuilder: knitr
