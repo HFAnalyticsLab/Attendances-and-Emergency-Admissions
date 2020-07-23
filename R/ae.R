@@ -13,7 +13,7 @@ links_from_url <- function(url) {
 ##' @title
 ##' @param defaults
 ##' @return
-##' @author neale
+##' @author Neale Swinnerton <neale@mastodonc.com>
 ##' @export
 ##' @examples
 ##' \dontrun{
@@ -37,7 +37,7 @@ ae_datasets_setup <- function(defaults) {
 ##' @param metadata
 ##' @return dataframe of available datasets
 ##' @export
-##' @author neale
+##' @author Neale Swinnerton <neale@mastodonc.com>
 ae_available_datasets <- function(metadata) {
     metadata %>% dplyr::select(id)
 }
@@ -49,7 +49,7 @@ ae_available_datasets <- function(metadata) {
 ##' @param id identifier for the dataset
 ##' @return
 ##' @export
-##' @author neale
+##' @author Neale Swinnerton <neale@mastodonc.com>
 ae_available_editions <- function(metadata, id) {
     # TODO hardcoded for now
     c("timeseries", "ae-by-provider")
@@ -166,7 +166,7 @@ ae_href_parser <- function(link_node, parent) {
 ##' @param edition
 ##' @return
 ##' @export
-##' @author neale
+##' @author Neale Swinnerton <neale@mastodonc.com>
 ae_available_versions <- function(metadata, id, edition) {
     edition_regex <- sprintf("(%s)", paste(ae_available_editions(), collapse="|"))
     versions <- links_from_url(sprintf("%s/%s/", base_url, id)) %>%
@@ -185,7 +185,7 @@ ae_available_versions <- function(metadata, id, edition) {
 ##' @param id
 ##' @return metadata describing the given dataset
 ##' @export
-##' @author neale
+##' @author Neale Swinnerton <neale@mastodonc.com>
 ae_dataset_by_id <- function(metadata, id, edition, version) {
     links <- links_from_url(sprintf("%s/%s/", base_url, id)) %>%
         purrr::map(~ xml2::xml_attr(., "href")) %>%
