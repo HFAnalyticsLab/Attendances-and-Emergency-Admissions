@@ -1,8 +1,10 @@
 base_url <- "https://www.england.nhs.uk/statistics/statistical-work-areas/ae-waiting-times-and-activity/"
 
 links_from_url <- function(url) {
+    # extracts all the <a> tags from the 'main-content' element. This
+    # avoids getting menus, sidebar and various dupes.
     xml2::read_html(url) %>%
-        rvest::html_nodes(css="#main-content a")
+        rvest::html_nodes(css = "#main-content a")
 }
 
 ##' .. content for \description{} (no empty lines) ..
