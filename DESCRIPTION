@@ -23,7 +23,8 @@ Imports:
     stringr,
     tidyr,
     monstR,
-    logger
+    logger,
+    whisker
 Suggests: 
     knitr,
     rmarkdown,
