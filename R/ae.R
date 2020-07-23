@@ -20,15 +20,16 @@ links_from_url <- function(url) {
 ##' ae_datasets_setup(monstr_pipeline_defaults()) # rooted in current project
 ##' }
 ae_datasets_setup <- function(defaults) {
-    links <- links_from_url(base_url) %>%
+    results <- links_from_url(base_url) %>%
         purrr::map(~ xml2::xml_attr(., "href")) %>%
         purrr::keep(~ grepl("ae-attendances-and-emergency-admissions", .)) %>%
         purrr::reduce(~ if (.y %in% .x) {.x} else {append(.x, .y)})
-    ids <- links %>%
+    results$ids <- results %>%
         purrr::modify(~ substr(., nchar(base_url) + 1, nchar(.) - 1))
 
-    ## TODO - should we have a column per dataset? allowing different meta per ds?
-    dplyr::tibble(id = ids, href = links)
+    results$monstr <- defaults
+
+    results
 }
 ##' .. content for \description{} (no empty lines) ..
 ##'
@@ -105,9 +106,10 @@ parse_year <- function(s) {
 }
 
 parse_version <- function(s) {
+    quarter <- parse_quarter(s)
     month <- parse_month(s)
     year <- parse_year(s)
-    dplyr::tibble(month = c(month), year = c(year))
+    dplyr::tibble(quarter = c(quarter), month = c(month), year = c(year))
 }
 
 parse_release_frequency <- function(s) {
@@ -154,13 +156,16 @@ parse_quarter <- function(s) {
     quarter
 }
 
-build_id <- function(parent, edition, release_frequency, month, year, debug) {
+build_id <- function(parent, edition, release_frequency, month, quarter, year, debug) {
     id <- edition
     if(!missing(release_frequency) && !is.na(release_frequency)) {
         id <- paste0(id, "_", release_frequency)
     }
     if(!missing(month) && !is.na(month)) {
         id <- paste0(id, "_", month)
+    }
+    if(!missing(quarter) && !is.na(quarter)) {
+        id <- paste0(id, "_", quarter)
     }
     if(!missing(year) && !is.na(year) ) {
         id <- paste0(id, "_", year)
@@ -190,22 +195,20 @@ ae_href_parser <- function(link_node, parent) {
                          adjusted = parse_adjusted(s),
                          release_frequency = parse_release_frequency(s))
     result$version$id <- build_id(edition = result$edition,
-                          release_frequency = result$release_frequency,
-                          month = result$version$month,
-                          year = result$version$year,
-                          debug = href)
-}
-
+                                  release_frequency = result$release_frequency,
+                                  quarter = result$version$quarter,
+                                  month = result$version$month,
+                                  year = result$version$year)
+    result}
 
 ##' .. content for \description{} (no empty lines) ..
 ##'
 ##' .. content for \details{} ..
 ##' @title
 ##' @param metadata
-##' @param id identifier for the dataset
+##' @param id
 ##' @param edition
 ##' @return
-##' @export
 ##' @author Neale Swinnerton <neale@mastodonc.com>
 ae_available_versions <- function(metadata, id, edition) {
     edition_regex <- sprintf("(%s)", paste(ae_available_editions(), collapse = "|"))
@@ -222,22 +225,34 @@ ae_available_versions <- function(metadata, id, edition) {
 ##' .. content for \details{} ..
 ##' @title
 ##' @param metadata
+##' @param id identifier for the dataset
+##' @param edition
+##' @return
+##' @export
+##' @author Neale Swinnerton <neale@mastodonc.com>
+##'
+ae_available_version_ids <- function(metadata, id, edition) {
+    ae_available_versions(metadata, id, edition) %>%
+        purrr::modify(~ .$version$id)
+}
+
+
+##' .. content for \description{} (no empty lines) ..
+##'
+##' .. content for \details{} ..
+##' @title
+##' @param metadata
 ##' @param id
 ##' @return metadata describing the given dataset
 ##' @export
 ##' @author Neale Swinnerton <neale@mastodonc.com>
 ae_dataset_by_id <- function(metadata, id, edition, version) {
-    versions <- ae_available_version(metadata, id, edition)
+    versions <- ae_available_versions(metadata, id, edition)
 
-    ## versions %>%
-    ##     purrr::keep(~ )
-    links <- links_from_url(sprintf("%s/%s/", base_url, id)) %>%
-        purrr::map(~ xml2::xml_attr(., "href")) %>%
-        purrr::keep(~ grepl(edition, ., ignore.case = TRUE)) %>%
-        purrr::reduce(~ if (.y %in% .x) {.x} else {append(.x, .y)})
-    links
+    metadata$dataset <- versions[versions$id %>% purrr::detect_index(~ .version$id == id)]
+
+    metadata
 }
-
 
 ##' Download
 ##'
@@ -248,4 +263,45 @@ ae_dataset_by_id <- function(metadata, id, edition, version) {
 ##' @import logger
 ae_download <- function(metadata,
                         format = "csv") {
+    validate_file <- function(f) {
+        TRUE ## TODO
+    }
+
+    try (if(!(format %in% c('xls'))) stop('Format not allowed'))
+
+    logger::log_info(sprintf("Downloading data from %s", metadata$href))
+
+    destfile <-  generate_download_filename(template=metadata$monstr$download_filename_template,
+                                            root=metadata$monstr$download_root,
+                                            data=metadata$monstr)
+
+    if (safe_download(url = c(metadata$href),
+                      destfile = destfile,
+                      fvalidate = validate_file)) {
+        write_metadata(metadata, sprintf("%s.meta.json", destfile))
+        logger::log_info(sprintf("File created at %s ", destfile))
+    }
+
+    if (metadata$monstr$is_latest) {
+
+        version <- metadata$monstr$version
+        metadata$monstr$version <- "LATEST"
+
+        linkfile <- generate_download_filename(template=metadata$monstr$download_filename_template,
+                                               root=metadata$monstr$download_root,
+                                               data=metadata$monstr)
+
+        metadata$monstr$version <- version
+        if (file.exists(linkfile)) {
+            file.remove(linkfile)
+        }
+
+        file.symlink(destfile,
+                     linkfile)
+        log_info("Create symlink to LATEST file")
+    }
+
+    metadata$monstr$destfile <- destfile
+    metadata
+
 }

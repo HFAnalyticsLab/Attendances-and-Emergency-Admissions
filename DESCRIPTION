@@ -24,7 +24,8 @@ Imports:
     tidyr,
     monstR,
     logger,
-    whisker
+    whisker,
+    curl
 Suggests: 
     knitr,
     rmarkdown,
