@@ -14,6 +14,17 @@ knitr::opts_chunk$set(
 )
 ```
 
-```{r setup}
+```{r setup, eval = FALSE}
 library(AttendancesAndEmergencyAdmissions)
+
+ae_datasets_setup(monstr_pipeline_defaults()) %>%
+    ae_dataset_by_id(ds, "ae-attendances-and-emergency-admissions-2020-21", "timeseries", "by-provider_april_2020") %>%
+	ae_download(format="xls")
+	
+# find available identifiers....
+ds <- ae_datasets_setup(monstr_pipeline_defaults())
+ae_available_datasets(ds)
+ae_available_editions()
+ae_available_versions()
+
 ```
