@@ -7,6 +7,36 @@ links_from_url <- function(url) {
         rvest::html_nodes(css = "#main-content a")
 }
 
+strip_base_url <- function(url) {
+    substr(url, nchar(base_url) + 1, nchar(url) - 1)
+}
+
+##' @title Create the MONSTR defaults
+##' @param download_root Root of directory hierarchy.
+##' @return an augmented metadata
+##' @author Neale Swinnerton <neale@mastodonc.com>
+##' @export
+##' @import here
+pipeline_defaults <- function(download_root="") {
+    basedir <- "{{download_root}}/data"
+    filepath <- "{{datasource}}/{{dataset}}/{{edition}}/{{dataset}}-v{{version}}.{{format}}"
+
+    metadata <- dplyr::tibble(download_filename_template=c(sprintf("%s/raw/%s",
+                                                                   basedir,
+                                                                   filepath)),
+                              clean_filename_template = c(sprintf("%s/clean/%s",
+                                                                  basedir,
+                                                                  filepath)))
+
+    if (missing(download_root)) {
+        metadata$download_root = here::here() # TODO here supposedly for
+                                            # interactive use?
+    } else {
+        metadata$download_root = download_root
+    }
+    metadata
+}
+
 ##' .. content for \description{} (no empty lines) ..
 ##'
 ##' .. content for \details{} ..
@@ -20,16 +50,16 @@ links_from_url <- function(url) {
 ##' ae_datasets_setup(monstr_pipeline_defaults()) # rooted in current project
 ##' }
 ae_datasets_setup <- function(defaults) {
-    results <- links_from_url(base_url) %>%
+    links <- links_from_url(base_url) %>%
         purrr::map(~ xml2::xml_attr(., "href")) %>%
         purrr::keep(~ grepl("ae-attendances-and-emergency-admissions", .)) %>%
         purrr::reduce(~ if (.y %in% .x) {.x} else {append(.x, .y)})
-    results$ids <- results %>%
-        purrr::modify(~ substr(., nchar(base_url) + 1, nchar(.) - 1))
 
-    results$monstr <- defaults
+    ids <- links %>% purrr::modify(strip_base_url)
 
-    results
+    items=tibble(id=ids,link=links)
+
+    tibble(items=list(tibble(items)), monstr=list(defaults))
 }
 ##' .. content for \description{} (no empty lines) ..
 ##'
@@ -40,7 +70,7 @@ ae_datasets_setup <- function(defaults) {
 ##' @export
 ##' @author Neale Swinnerton <neale@mastodonc.com>
 ae_available_datasets <- function(metadata) {
-  metadata %>% dplyr::select(id)
+  metadata$items[[1]] %>% dplyr::select(id)
 }
 
 ##' Return a list of available editions
@@ -53,7 +83,7 @@ ae_available_datasets <- function(metadata) {
 ##' @author Neale Swinnerton <neale@mastodonc.com>
 ae_available_editions <- function(metadata, id) {
   # TODO hardcoded for now
-  c("timeseries", "ae-by-provider")
+    tibble(edition=c("timeseries", "ae-by-provider"))
 }
 
 parse_month <- function(s) {
@@ -211,12 +241,11 @@ ae_href_parser <- function(link_node, parent) {
 ##' @return
 ##' @author Neale Swinnerton <neale@mastodonc.com>
 ae_available_versions <- function(metadata, id, edition) {
-    edition_regex <- sprintf("(%s)", paste(ae_available_editions(), collapse = "|"))
+    edition_regex <- sprintf("(%s)", paste(ae_available_editions()$edition, collapse = "|"))
     versions <- links_from_url(sprintf("%s/%s/", base_url, id)) %>%
-        purrr::map(~ dplyr::tibble(href = xml2::xml_attr(., "href"), description = xml2::xml_text(.))) %>%
+        purrr::map(~ list(href = xml2::xml_attr(., "href"), description = xml2::xml_text(.)))  %>%
         purrr::keep(~ grepl(edition_regex, .$href, ignore.case = TRUE)) %>%
         purrr::modify(ae_href_parser, id)
-
     versions
 }
 
