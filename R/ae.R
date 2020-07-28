@@ -229,7 +229,7 @@ ae_href_parser <- function(link_node, parent) {
                                   quarter = result$version$quarter,
                                   month = result$version$month,
                                   year = result$version$year)
-    result}
+    flatten(result)}
 
 ##' .. content for \description{} (no empty lines) ..
 ##'
@@ -242,11 +242,11 @@ ae_href_parser <- function(link_node, parent) {
 ##' @author Neale Swinnerton <neale@mastodonc.com>
 ae_available_versions <- function(metadata, id, edition) {
     edition_regex <- sprintf("(%s)", paste(ae_available_editions()$edition, collapse = "|"))
-    versions <- links_from_url(sprintf("%s/%s/", base_url, id)) %>%
+    versions <- tibble(version=links_from_url(sprintf("%s/%s/", base_url, id)) %>%
         purrr::map(~ list(href = xml2::xml_attr(., "href"), description = xml2::xml_text(.)))  %>%
         purrr::keep(~ grepl(edition_regex, .$href, ignore.case = TRUE)) %>%
-        purrr::modify(ae_href_parser, id)
-    versions
+        purrr::modify(ae_href_parser, id))
+    unnest_wider(versions, 'version')
 }
 
 ##' .. content for \description{} (no empty lines) ..
