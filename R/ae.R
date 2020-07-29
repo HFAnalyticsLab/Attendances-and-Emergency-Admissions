@@ -11,7 +11,22 @@ strip_base_url <- function(url) {
     substr(url, nchar(base_url) + 1, nchar(url) - 1)
 }
 
-##' @title Create the MONSTR defaults
+maybe_append <- function(s, v, sep) {
+    print(s)
+    print(v)
+
+    if (is.na(v)) {
+        s
+    } else {
+        if(is.na(s) || stringr::str_length(s) == 0) {
+            paste0("", v)
+        } else {
+            paste0(s, sep, v)
+        }
+    }
+}
+
+##' @title Create the pipeline defaults
 ##' @param download_root Root of directory hierarchy.
 ##' @return an augmented metadata
 ##' @author Neale Swinnerton <neale@mastodonc.com>
@@ -47,7 +62,7 @@ pipeline_defaults <- function(download_root="") {
 ##' @export
 ##' @examples
 ##' \dontrun{
-##' ae_datasets_setup(monstr_pipeline_defaults()) # rooted in current project
+##' ae_datasets_setup(pipeline_defaults()) # rooted in current project
 ##' }
 ae_datasets_setup <- function(defaults) {
     links <- links_from_url(base_url) %>%
@@ -57,9 +72,11 @@ ae_datasets_setup <- function(defaults) {
 
     ids <- links %>% purrr::modify(strip_base_url)
 
-    items=tibble(id=ids,link=links)
+    items=dplyr::tibble(id=ids,link=links)
+    pipeline__ <- defaults
+    pipeline__$datasource <- "A_and_E"
 
-    tibble(items=list(tibble(items)), monstr=list(defaults))
+    dplyr::tibble(items=list(dplyr::tibble(items)), pipeline__=list(pipeline__))
 }
 ##' .. content for \description{} (no empty lines) ..
 ##'
@@ -83,7 +100,13 @@ ae_available_datasets <- function(metadata) {
 ##' @author Neale Swinnerton <neale@mastodonc.com>
 ae_available_editions <- function(metadata, id) {
   # TODO hardcoded for now
-    tibble(edition=c("timeseries", "ae-by-provider"))
+    dplyr::tibble(edition=c("timeseries", "ae-by-provider"))
+}
+
+grep_bounded_word <- function(pattern, s) {
+# grep for the word surrounded by word boundaries, but consider a _ to
+# be a word boundary (unlike \b in pcre)
+    grepl(paste0("(?<![A-Za-z\\A])",pattern,"(?![A-Za-z]\\Z)"), s, ignore.case = TRUE, perl = TRUE)
 }
 
 parse_month <- function(s) {
@@ -92,29 +115,29 @@ parse_month <- function(s) {
     ## readability. This is inefficient (multiple calls to grep*), but
     ## we don't expect this to be called a lot. If it *is* called a
     ## lot this implementation can be revisited
-    if (grepl("\\bJan(?:uary)?\\b", s, ignore.case = TRUE)) {
+    if (grep_bounded_word("Jan(?:uary)?", s)) {
         version <- "january"
-    } else if (grepl("\\bFeb(?:ruary)?\\b", s, ignore.case = TRUE)) {
+    } else if (grep_bounded_word("Feb(?:ruary)?", s)) {
         version <- "february"
-    } else if (grepl("\\bMar(?:ch)?\\b", s, ignore.case = TRUE)) {
+    } else if (grep_bounded_word("Mar(?:ch)?", s)) {
         version <- "march"
-    } else if (grepl("\\bApr(?:il)?\\b", s, ignore.case = TRUE)) {
+    } else if (grep_bounded_word("Apr(?:il)?", s)) {
         version <- "april"
-    } else if (grepl("\\bMay\\b", s, ignore.case = TRUE)) {
+    } else if (grep_bounded_word("May", s)) {
         version <- "may"
-    } else if (grepl("\\bJun(?:e)?\\b", s, ignore.case = TRUE)) {
+    } else if (grep_bounded_word("Jun(?:e)?", s)) {
         version <- "june"
-    } else if (grepl("\\bJul(?:y)?\\b", s, ignore.case = TRUE)) {
+    } else if (grep_bounded_word("Jul(?:y)?", s)) {
         version <- "july"
-    } else if (grepl("\\bAug(?:ust)?\\b", s, ignore.case = TRUE)) {
+    } else if (grep_bounded_word("Aug(?:ust)?", s)) {
         version <- "august"
-    } else if (grepl("\\bSep(?:tember)?\\b", s, ignore.case = TRUE)) {
+    } else if (grep_bounded_word("Sep(?:tember)?", s)) {
         version <- "september"
-    } else if (grepl("\\bOct(?:ober)?\\b", s, ignore.case = TRUE)) {
+    } else if (grep_bounded_word("Oct(?:ober)?", s)) {
         version <- "october"
-    } else if (grepl("\\bNov(?:ember)?\\b", s, ignore.case = TRUE)) {
+    } else if (grep_bounded_word("Nov(?:ember)?", s)) {
         version <- "november"
-    } else if (grepl("\\bDec(?:ember)?\\b", s, ignore.case = TRUE)) {
+    } else if (grep_bounded_word("Dec(?:ember)?", s)) {
         version <- "december"
     } else {
         version <- NA
@@ -123,7 +146,7 @@ parse_month <- function(s) {
 }
 
 parse_year <- function(s) {
-  re <- regexec("(?<!\\d)\\d{4}(?!\\d)", s, perl = TRUE) # 4 digits NOT preceded by or followed by a digit
+    re <- regexec("(?<![\\d\\A])\\d{4}(?![\\d\\Z])", s, perl = TRUE) # 4 digits NOT preceded by or followed by a digit
   l <- attr(re[[1]], "match.length")[1]
   if (l != -1) {
     match <- re[[1]][1]
@@ -136,10 +159,13 @@ parse_year <- function(s) {
 }
 
 parse_version <- function(s) {
-    quarter <- parse_quarter(s)
-    month <- parse_month(s)
-    year <- parse_year(s)
-    dplyr::tibble(quarter = c(quarter), month = c(month), year = c(year))
+    version <- "" %>%
+        maybe_append(parse_quarter(s), "_") %>%
+        maybe_append(parse_month(s), "_") %>%
+        maybe_append(parse_year(s), "_")
+
+
+    dplyr::tibble(version = c(version), is_latest=c(FALSE))
 }
 
 parse_release_frequency <- function(s) {
@@ -166,14 +192,14 @@ parse_edition <- function(s) {
   if (grepl("Timeseries", s, ignore.case = TRUE)) {
     "timeseries"
   } else if (grepl("by[_-]provider", s, ignore.case = TRUE)) {
-    "by-provider"
+    "by_provider"
   } else {
       NA
   }
 }
 
 parse_quarter <- function(s) {
-    re <- regexec("\\bQ(?:uarter)?[-_]?([1-4])\\b", s, perl=TRUE)
+    re <- regexec("(?<![\\d\\A])Q(?:uarter)?[-_]?([1-4])(?![\\d\\Z])", s, perl=TRUE) # Match Q1 or Quarter_1 like things but no Q23 etc.
     l <- attr(re[[1]], "match.length")
     if (l[1] != -1) {
         l <- l[[2]]
@@ -188,17 +214,17 @@ parse_quarter <- function(s) {
 
 build_id <- function(parent, edition, release_frequency, month, quarter, year, debug) {
     id <- edition
-    if(!missing(release_frequency) && !is.na(release_frequency)) {
-        id <- paste0(id, "_", release_frequency)
+    if(!missing(release_frequency)) {
+        id <- maybe_append(id, "_", release_frequency)
     }
-    if(!missing(month) && !is.na(month)) {
-        id <- paste0(id, "_", month)
+    if(!missing(month)) {
+        id <- maybe_append(id, "_", month)
     }
-    if(!missing(quarter) && !is.na(quarter)) {
-        id <- paste0(id, "_", quarter)
+    if(!missing(quarter)) {
+        id <- maybe_append(id, "_", quarter)
     }
-    if(!missing(year) && !is.na(year) ) {
-        id <- paste0(id, "_", year)
+    if(!missing(year)) {
+        id <- maybe_append(id, "_", year)
     }
 
     if (!missing(debug)) {
@@ -229,7 +255,7 @@ ae_href_parser <- function(link_node, parent) {
                                   quarter = result$version$quarter,
                                   month = result$version$month,
                                   year = result$version$year)
-    flatten(result)}
+    purrr::flatten(result)}
 
 ##' .. content for \description{} (no empty lines) ..
 ##'
@@ -242,11 +268,11 @@ ae_href_parser <- function(link_node, parent) {
 ##' @author Neale Swinnerton <neale@mastodonc.com>
 ae_available_versions <- function(metadata, id, edition) {
     edition_regex <- sprintf("(%s)", paste(ae_available_editions()$edition, collapse = "|"))
-    versions <- tibble(version=links_from_url(sprintf("%s/%s/", base_url, id)) %>%
+    versions <- dplyr::tibble(version=links_from_url(sprintf("%s/%s/", base_url, id)) %>%
         purrr::map(~ list(href = xml2::xml_attr(., "href"), description = xml2::xml_text(.)))  %>%
         purrr::keep(~ grepl(edition_regex, .$href, ignore.case = TRUE)) %>%
         purrr::modify(ae_href_parser, id))
-    unnest_wider(versions, 'version')
+    tidyr::unnest_wider(versions, "version")
 }
 
 ##' .. content for \description{} (no empty lines) ..
@@ -261,8 +287,7 @@ ae_available_versions <- function(metadata, id, edition) {
 ##' @author Neale Swinnerton <neale@mastodonc.com>
 ##'
 ae_available_version_ids <- function(metadata, id, edition) {
-    ae_available_versions(metadata, id, edition) %>%
-        purrr::modify(~ .$version$id)
+    ae_available_versions(metadata, id, edition) %>% select(id, description)
 }
 
 
@@ -278,9 +303,18 @@ ae_available_version_ids <- function(metadata, id, edition) {
 ae_dataset_by_id <- function(metadata, id, edition, version) {
     versions <- ae_available_versions(metadata, id, edition)
 
-    metadata$dataset <- versions[versions$id %>% purrr::detect_index(~ .version$id == id)]
+    dataset <- versions %>% dplyr::filter(id == version)
 
-    metadata
+    if (length(dataset) == 0) {
+        stop(sprintf("No dataset with version "%s" found", version))
+    } else {
+        metadata$pipeline__[[1]]$dataset <- list(dataset)
+        metadata
+    }
+}
+
+pipeline_metadata <- function(metadata) {
+    metadata$pipeline__[[1]]
 }
 
 ##' Download
@@ -296,31 +330,32 @@ ae_download <- function(metadata,
         TRUE ## TODO
     }
 
-    try (if(!(format %in% c('xls'))) stop('Format not allowed'))
+    try (if(!(format %in% c("xls"))) stop("Format not allowed"))
 
     logger::log_info(sprintf("Downloading data from %s", metadata$href))
 
-    destfile <-  generate_download_filename(template=metadata$monstr$download_filename_template,
-                                            root=metadata$monstr$download_root,
-                                            data=metadata$monstr)
+    pipeline__ <- pipeline_metadata(metadata)
+    destfile <-  generate_download_filename(template=pipeline__$download_filename_template,
+                                            root=pipeline__$download_root,
+                                            data=pipeline__$dataset)
 
-    if (safe_download(url = c(metadata$href),
+    if (safe_download(url = c(pipeline__$dataset[[1]]$href),
                       destfile = destfile,
                       fvalidate = validate_file)) {
         write_metadata(metadata, sprintf("%s.meta.json", destfile))
         logger::log_info(sprintf("File created at %s ", destfile))
     }
 
-    if (metadata$monstr$is_latest) {
+    if (metadata$pipeline__$is_latest) {
 
-        version <- metadata$monstr$version
-        metadata$monstr$version <- "LATEST"
+        version <- metadata$pipeline__$version
+        metadata$pipeline__$version <- "LATEST"
 
-        linkfile <- generate_download_filename(template=metadata$monstr$download_filename_template,
-                                               root=metadata$monstr$download_root,
-                                               data=metadata$monstr)
+        linkfile <- generate_download_filename(template=metadata$pipeline__$download_filename_template,
+                                               root=metadata$pipeline__$download_root,
+                                               data=metadata$pipeline__)
 
-        metadata$monstr$version <- version
+        metadata$pipeline__$version <- version
         if (file.exists(linkfile)) {
             file.remove(linkfile)
         }
@@ -330,7 +365,7 @@ ae_download <- function(metadata,
         log_info("Create symlink to LATEST file")
     }
 
-    metadata$monstr$destfile <- destfile
+    metadata$pipeline__$destfile <- destfile
     metadata
 
 }
